@@ -1,0 +1,366 @@
+---
+title: "Clark County COVID-19 Statistics"
+date: "October 16, 2020"
+output: powerpoint_presentation 
+
+---
+
+
+
+
+\pagenumbering{gobble}
+\clearpage
+\thispagestyle{empty}
+
+\begin{titlepage}
+
+\end{titlepage}
+\captionsetup[table]{
+  labelsep=newline,
+justification=justified,
+  singlelinecheck=false, %textfont=it,
+}
+\clearpage
+\tableofcontents
+
+\newpage
+
+\listoffigures
+\clearpage
+
+\pagenumbering{arabic}
+
+
+  
+```{r results='asis', echo=FALSE, include=FALSE,}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE)
+library(kableExtra)
+#library(hrbrthemes)
+library(tidyverse)
+library(scales)
+library(lubridate)
+library(forecast)
+library(zoo)
+extrafont::loadfonts()
+library(knitr)
+```
+
+
+
+
+
+```{r, echo=FALSE, message=FALSE}
+CV125<-read_csv("CV125.csv")
+
+
+REGFIN<-read_csv("REGFIN.csv")
+REGCEN<-summarize(group_by(REGFIN,REG),CENSUS=sum(C10))
+
+left_join(CV125,REGFIN, by="NAME")->CV125
+
+CV125%>%
+  complete(NAME,
+           nesting(DATE),
+           fill = list(CCNT = 0, DCNT = 0, HCNT =0)) -> CV125
+CV125$WEEK<- isoweek(CV125$DATE)
+CV125 %>% mutate_if(is.numeric, funs(replace_na(.,0))) -> CV125
+CV125%>% drop_na(REG)->CV125
+CV125%>% drop_na(AGE)->CV125
+CV125<-filter(CV125, AGE!="Unknown")
+
+CV125$CASEMA = ma(CV125$CCNT, order=7)
+CV125$DEATHMA = ma(CV125$DCNT, order=7)
+CV125$HOSPMA = ma(CV125$HCNT, order=7)
+CVREGSUM<-summarize(group_by(CV125,REG,DATE),CASEMA=sum(CASEMA),HOSPMA=sum(HOSPMA), DEATHMA=sum(DEATHMA)) 
+left_join(CVREGSUM,REGCEN, by="REG")->CVREGSUM
+CVREGSUM%>% mutate(RCASEMA = ((CASEMA/CENSUS)*100000))->CVREGSUM 
+CVREGSUM%>% mutate(RHOSPMA = ((HOSPMA/CENSUS)*100000))->CVREGSUM
+CVREGSUM%>% mutate(RDEATHMA = ((DEATHMA/CENSUS)*100000))->CVREGSUM
+CVREGSUM%>% mutate(RDH = ((DEATHMA/HOSPMA)*100))->CVREGSUM
+CVREGSUM%>% drop_na(REG)->CVREGSUM
+#CVREGSUM<-filter(CVREGSUM, DATE>'2019-12-31' & DATE<'2020-11-13')
+CV125$CASEMA = ma(CV125$CCNT, order=7)
+CV125$DEATHMA = ma(CV125$DCNT, order=7)
+CV125$HOSPMA = ma(CV125$HCNT, order=7)
+CVREGSUM<-summarize(group_by(CV125,REG,DATE),CASEMA=sum(CASEMA),HOSPMA=sum(HOSPMA), DEATHMA=sum(DEATHMA)) 
+left_join(CVREGSUM,REGCEN, by="REG")->CVREGSUM
+CVREGSUM%>% mutate(RCASEMA = ((CASEMA/CENSUS)*100000))->CVREGSUM 
+CVREGSUM%>% mutate(RHOSPMA = ((HOSPMA/CENSUS)*100000))->CVREGSUM
+CVREGSUM%>% mutate(RDEATHMA = ((DEATHMA/CENSUS)*100000))->CVREGSUM
+CVREGSUM%>% mutate(RDH = ((DEATHMA/HOSPMA)*100))->CVREGSUM
+CVREGSUM%>% mutate(RDC = ((DEATHMA/CASEMA)*100))->CVREGSUM
+CVREGSUM%>% drop_na(REG)->CVREGSUM
+#CVREGSUM<-filter(CVREGSUM, DATE>'2019-12-31' & DATE<'2020-11-13')
+CVAGESUM<-summarize(group_by(CV125,AGE),CASE=sum(CCNT),HOSP=sum(HCNT), DEATH=sum(DCNT))
+
+
+CVAGESUM%>% drop_na(AGE)->CVAGESUM
+CVAGESUM %>% mutate(DEATH2=as.integer(DEATH))->CVAGESUM
+
+CVAGE2SUM<-summarize(group_by(CV125,AGE,DATE),CASE=sum(CCNT),HOSP=sum(HCNT), DEATH=sum(DCNT))
+
+CVSUM<-summarize(group_by(CV125,DATE),CASE=sum(CCNT),HOSP=sum(HCNT), DEATH=sum(DCNT))
+
+CVCO<-filter(CV125, NAME=='Clark')
+CVCOS<-summarize(group_by(CVCO,DATE),CASE=sum(CCNT),HOSP=sum(HCNT), DEATH=sum(DCNT))
+CVAGESUMC<-summarize(group_by(CVCO,AGE),CASE=sum(CCNT),HOSP=sum(HCNT), DEATH=sum(DCNT))
+
+
+
+CVMAP<-summarize(group_by(CV125,NAME),CASE=sum(CCNT),HOSP=sum(HCNT), DEATH=sum(DCNT))
+
+left_join(CVMAP,REGFIN, by="NAME")->CVMAP
+
+CVMAP%>% mutate(RCASE = ((CASE/C10)*100000))->CVMAP 
+CVMAP%>% mutate(RHOSP = ((HOSP/C10)*100000))->CVMAP
+CVMAP%>% mutate(RDEATH = ((DEATH/C10)*100000))->CVMAP
+
+CVMAP %>% mutate_if(is.numeric, funs(replace_na(.,0))) -> CVMAP
+write.csv(CVMAP,"CVMAP.csv", row.names = FALSE)
+```
+```{r, echo=FALSE, message=FALSE}
+CV125 <- CV125 %>% mutate(MDATE = floor_date(as_date(DATE),"month"))
+CVMOSUM<-summarize(group_by(CV125,MDATE),CASE=sum(CCNT),HOSP=sum(HCNT),DEATH=sum(DCNT)) 
+CVMOSUM %>% mutate(H2I=round((HOSP/CASE*100),2))->CVMOSUM
+CVMOSUM %>% mutate(D2H=round((DEATH/HOSP*100),2))->CVMOSUM
+CVMOSUM<-filter(CVMOSUM, MDATE>"2020-02-29" & MDATE<"2020-11-01")
+```
+```{r, echo=FALSE, message=FALSE}
+CV125 <- CV125 %>% mutate(MDATE = floor_date(as_date(DATE),"month"))
+CVCOMOSUM<-summarize(group_by(CV125,NAME,MDATE),CASE=sum(CCNT),HOSP=sum(HCNT),DEATH=sum(DCNT)) 
+CVCOMOSUM %>% mutate(H2I=round((HOSP/CASE*100),2))->CVCOMOSUM
+CVCOMOSUM %>% mutate(D2H=round((DEATH/HOSP*100),2))->CVCOMOSUM
+CVCOMOSUM<-filter(CVCOMOSUM, MDATE>"2020-02-29" & MDATE<"2020-11-01",NAME=="Clark")
+
+CVMOSUM %>% mutate(NAME="Ohio")->CVMOSUM
+CVCOMOSUM2<-rbind(CVCOMOSUM,CVMOSUM)
+left_join(CVCOMOSUM2,REGFIN, by="NAME")->CVCOMOSUM2
+CVCOMOSUM2 %>% mutate(I2P=round((CASE/C10*100000),2))->CVCOMOSUM2
+```
+
+# Introduction
+The following presentation summarizes Ohio COVID-19 data obtained from the Department of Health COVID-19 warehouse. Data for the state of Ohio and Clark County are presented. In addition to descriptive reports for the state and individual counties available on the state website, the Ohio Alliance for Innovation in Population Health has summarized trends by region of state and has calculated county level outcome indicators that measure disease transmission, population susceptability to adverse outcomes and the effectiveness of health systems at mitigating the effects of COVID-19. These measures will be explained at greater length later in this report. 
+
+
+\newpage
+
+# Ohio Regions by County
+
+```{r pressure, echo=FALSE, fig.align ='center', out.width = '100%'}
+knitr::include_graphics("reg.jpeg")
+```
+
+# Age Groups
+The next series of graphs show the total number of Ohio cases, hospitalizations and deaths attributable to COVID-19 by  reported age group of infected persons. Infections are negatively skewed with higher numbers of younger Ohioans represented in the data. 
+
+Hospitalizations and deaths are positively skewed with increasingly disproportionate numbers of Older Ohioans experiencing adverse outcomes caused by the disease. While this is generally known, the overall magnitude of deaths among older Ohioans verses younger Ohioans is still surprising. 
+
+\newpage
+
+# Infections by Age
+
+```{r echo=FALSE, dpi=300}
+ggplot(CVAGESUM, aes(x=AGE, y=CASE)) + geom_bar(fill="#78244C",stat="identity",alpha=0.7) +
+labs(caption = "Source: Ohio Department of Health", y="Cases", x="Age", color=NULL)+ 
+theme_minimal()+theme(axis.title.y=element_text(vjust=0.95,size=9,colour="gray50"))+geom_text(aes(label = scales::comma(round(CASE), accuracy=1)), position=position_dodge(width=2.0), size=2, hjust=0.5,vjust=-1.0)
+```
+
+
+\newpage
+
+# Hospitalizations by Age
+
+```{r echo=FALSE, dpi=300}
+ggplot(CVAGESUM, aes(x=AGE, y=HOSP)) + geom_bar(fill="#78244C",stat="identity",alpha=0.7) +
+labs(caption = "Source: Ohio Department of Health", y="Cases", x="Age", color=NULL)+ 
+theme_minimal()+theme(axis.title.y=element_text(vjust=0.95,size=9,colour="gray50"))+geom_text(aes(label = scales::comma(round(HOSP), accuracy=1)), position=position_dodge(width=0.8), size=2, hjust=0.5,vjust=-1.0)
+```
+
+
+\newpage
+
+
+# Deaths by Age
+
+```{r echo=FALSE, dpi=300}
+ggplot(CVAGESUM, aes(x=AGE, y=DEATH)) + geom_bar(fill="#78244C",stat="identity",alpha=0.7) +
+labs(caption = "Source: Ohio Department of Health", y="Cases", x="Age", color=NULL)+ 
+theme_minimal()+theme(axis.title.y=element_text(vjust=0.95,size=9,colour="gray50"))+geom_text(aes(label = scales::comma(round(DEATH), accuracy=1)), position=position_dodge(width=0.8), size=2, hjust=0.5,vjust=-1.0)
+```
+\newpage
+
+# Over Time
+
+The following graphs show the number of infections, hospitalizations and deaths by day since the beginning of the pandemic. The number of infections in recent weeks has increased dramatically and is generally consistent with temporal pattern associated with influenza. Hospitalization data displays a multi-modal pattern with peaks in the spring, summer and fall. Deaths, however, have declined since the spring peak. A series of graphs summarizing these data by region of state is also presented.
+
+It is important to note that recorded cases, hospitalizations and deaths lag behind actual events so data points graphed for the last several days of the reporting period are lower than actual incidence and should be interpreted with caution.
+
+\newpage
+
+# Total Infections Over Time
+
+```{r echo=FALSE, message=FALSE, dpi=300}
+ggplot(CVSUM, aes(x=DATE, y=CASE)) +geom_area(fill="#78244C", alpha=0.3) + geom_line(color="#78244C",size=0.1) + 
+geom_smooth(color="#2D4159",span=0.2, se=FALSE,size=0.5)+ labs(caption = "Source: Ohio Department of Health", y="Cases", x="Month", color=NULL)+scale_x_date(labels = date_format("%m")) +
+theme_minimal()+theme(axis.title.y=element_text(hjust=0.7,size=10,colour="gray50"))
+```
+
+\newpage
+
+# Total Hospitalizations Over Time
+
+```{r echo=FALSE, message=FALSE, dpi=300}
+ggplot(CVSUM, aes(x=DATE, y=HOSP)) +geom_area(fill="#78244C", alpha=0.3) +     geom_line(color="#78244C",size=0.1) + 
+geom_smooth(color="#2D4159",span=0.2, se=FALSE,size=0.5)+ labs(caption = "Source: Ohio Department of Health", y="Cases", x="Month", color=NULL)+scale_x_date(labels = date_format("%m")) +
+theme_minimal()+theme(axis.title.y=element_text(hjust=0.7,size=10,colour="gray50"))
+```
+
+\newpage
+
+# Total Deaths Over Time
+
+```{r echo=FALSE, message=FALSE, dpi=300}
+ggplot(CVSUM, aes(x=DATE, y=DEATH)) +geom_area(fill="#78244C", alpha=0.3) +     geom_line(color="#78244C",size=0.1) + 
+geom_smooth(color="#2D4159",span=0.2, se=FALSE,size=0.5)+ labs(caption = "Source: Ohio Department of Health", y="Cases", x="Month", color=NULL)+scale_x_date(labels = date_format("%m")) +
+theme_minimal()+theme(axis.title.y=element_text(hjust=0.7,size=10,colour="gray50"))
+```
+
+
+\newpage
+
+
+# Rate per 100,000 Infections by Region of State
+
+```{r echo=FALSE, message=FALSE, dpi=300}
+ggplot(CVREGSUM, aes(x=DATE, y=RCASEMA)) +geom_area(fill="#78244C", alpha=0.3) +     geom_line(color="#78244C",size=0.1) + 
+geom_smooth(color="#2D4159",span=0.2, se=FALSE,size=0.5)+ labs(caption = "Source: Ohio Department of Health", y="Cases", x="Month", color=NULL)+ facet_wrap(~REG) +scale_x_date(labels = date_format("%m")) +
+theme_minimal()+theme(axis.title.y=element_text(hjust=0.7,size=10,colour="gray50"))
+```
+
+
+\newpage
+
+# Rate per 100,000 Hospitalizations by Region of State
+
+```{r echo=FALSE, message=FALSE, dpi=300}
+ggplot(CVREGSUM, aes(x=DATE, y=RHOSPMA)) +geom_area(fill="#78244C", alpha=0.3) +     geom_line(color="#78244C",size=0.1) + 
+geom_smooth(color="#2D4159",span=0.2, se=FALSE,size=0.5)+ labs(caption = "Source: Ohio Department of Health", y="Cases", x="Month", color=NULL)+ facet_wrap(~REG) +scale_x_date(labels = date_format("%m")) +
+theme_minimal()+theme(axis.title.y=element_text(hjust=0.7,size=10,colour="gray50"))
+```
+
+\newpage
+
+# Rate per 100,000 Deaths by Region of State
+
+```{r echo=FALSE, message=FALSE, dpi=300}
+ggplot(CVREGSUM, aes(x=DATE, y=RDEATHMA)) +geom_area(fill="#78244C", alpha=0.3) +     geom_line(color="#78244C",size=0.1) + 
+geom_smooth(color="#2D4159",span=0.2, se=FALSE,size=0.5)+ labs(caption = "Source: Ohio Department of Health", y="Cases", x="Month", color=NULL)+ facet_wrap(~REG) +scale_x_date(labels = date_format("%m")) +
+theme_minimal()+theme(axis.title.y=element_text(hjust=0.7,size=10,colour="gray50"))
+```
+
+\newpage
+
+# Clark County Data
+
+\newpage
+
+
+# Clark Co. Infections by Age
+
+```{r echo=FALSE, dpi=300}
+ggplot(CVAGESUMC, aes(x=AGE, y=CASE)) + geom_bar(fill="#116466",stat="identity",alpha=0.7) +
+labs(caption = "Source: Ohio Department of Health", y="Cases", x="Age", color=NULL)+ 
+theme_minimal()+theme(axis.title.y=element_text(vjust=0.95,size=9,colour="gray50"))+geom_text(aes(label = scales::comma(round(CASE), accuracy=1)), position=position_dodge(width=2.0), size=2, hjust=0.5,vjust=-1.0)
+```
+
+
+\newpage
+
+# Clark Co. Hospitalizations by Age
+
+```{r echo=FALSE, dpi=300}
+ggplot(CVAGESUMC, aes(x=AGE, y=HOSP)) + geom_bar(fill="#116466",stat="identity",alpha=0.7) +
+labs(caption = "Source: Ohio Department of Health", y="Cases", x="Age", color=NULL)+ 
+theme_minimal()+theme(axis.title.y=element_text(vjust=0.95,size=9,colour="gray50"))+geom_text(aes(label = scales::comma(round(HOSP), accuracy=1)), position=position_dodge(width=0.8), size=2, hjust=0.5,vjust=-1.0)
+```
+
+
+\newpage
+
+
+# Clark Co. Deaths by Age
+
+```{r echo=FALSE, dpi=300}
+ggplot(CVAGESUMC, aes(x=AGE, y=DEATH)) + geom_bar(fill="#116466",stat="identity",alpha=0.7) +
+labs(caption = "Source: Ohio Department of Health", y="Cases", x="Age", color=NULL)+ 
+theme_minimal()+theme(axis.title.y=element_text(vjust=0.95,size=9,colour="gray50"))+geom_text(aes(label = scales::comma(round(DEATH), accuracy=1)), position=position_dodge(width=0.8), size=2, hjust=0.5,vjust=-1.0)
+```
+
+# Clark Co. Infections Over Time
+
+```{r echo=FALSE, message=FALSE, dpi=300}
+ggplot(CVCOS, aes(x=DATE, y=CASE)) +geom_area(fill="#116466", alpha=0.3) + geom_line(color="#78244C",size=0.1) + 
+geom_smooth(color="#2D4159",span=0.2, se=FALSE,size=0.5)+ labs(caption = "Source: Ohio Department of Health", y="Cases", x="Month", color=NULL)+scale_x_date(labels = date_format("%m")) +
+theme_minimal()+theme(axis.title.y=element_text(hjust=0.7,size=10,colour="gray50"))
+```
+
+\newpage
+
+# Clark Co. Hospitalizations Over Time
+
+```{r echo=FALSE, message=FALSE, dpi=300}
+ggplot(CVCOS, aes(x=DATE, y=HOSP)) +geom_area(fill="#116466", alpha=0.3) +     geom_line(color="#78244C",size=0.1) + 
+geom_smooth(color="#2D4159",span=0.2, se=FALSE,size=0.5)+ labs(caption = "Source: Ohio Department of Health", y="Cases", x="Month", color=NULL)+scale_x_date(labels = date_format("%m")) +
+theme_minimal()+theme(axis.title.y=element_text(hjust=0.7,size=10,colour="gray50"))
+```
+
+\newpage
+
+# Clark Co. Deaths Over Time
+
+```{r echo=FALSE, message=FALSE, dpi=300}
+ggplot(CVCOS, aes(x=DATE, y=DEATH)) +geom_area(fill="#116466", alpha=0.3) +     geom_line(color="#78244C",size=0.1) + 
+geom_smooth(color="#2D4159",span=0.2, se=FALSE,size=0.5)+ labs(caption = "Source: Ohio Department of Health", y="Cases", x="Month", color=NULL)+scale_x_date(labels = date_format("%m")) +
+theme_minimal()+theme(axis.title.y=element_text(hjust=0.7,size=10,colour="gray50"))
+```
+
+# Clark Co. Infection Rate per 100,000 Population
+
+The Infection Rate per 100,000 population is a proposed measure of how efficiently the Coronavirus transmits within a geographic area. Transmission efficiency is a function of population density, and the concentration of residential institutions which are difficult to influence by short-term policy actions, as well as adherence to social distancing, mask compliance and other behavioral factors that can be influenced through state and local policy decisions. The following graph shows how the infection rate per 100,000 population has changed by month for Clark County and Ohio.     
+
+\newpage
+
+# Clark Co. Infection Rate per 100,000 Population
+
+```{r echo=FALSE, dpi=300}
+ggplot(CVCOMOSUM2, aes(x=MDATE, y=I2P,fill=NAME)) +geom_col(alpha=0.7,position="dodge") +  labs(caption = "Source: Ohio Department of Health", y="Cases", x="Month", color=NULL)+scale_x_date(labels = date_format("%b")) + theme_minimal()+theme(axis.title.y=element_text(hjust=0.7,size=10,colour="gray50"))+scale_fill_manual(values=c("#116466","#78244C"))
+```
+
+\newpage
+
+# Clark Co. Rate of Hospitalizations to Infections
+
+The ratio of hospitalizations to infections  (H2I) is a proposed measure for how susceptIble the population of a geographic area is to adverse outcomes associated with COVID-19. This measure is calculated by dividing the number of hospitalizations by the total number of infections. 
+
+For the purposes of this exercise, it is assumed that high ratios of hospitalizations to infections is indicative of a geographic region that has a higher percentage of persons struggling with underlying conditions and therefore more susceptible to adverse outcomes.
+
+\newpage
+
+# Clark Co. Rate of Hospitalizations to Infections
+
+```{r echo=FALSE, dpi=300}
+ggplot(CVCOMOSUM2, aes(x=MDATE, y=H2I,fill=NAME)) +geom_col(alpha=0.7,position="dodge") +  labs(caption = "Source: Ohio Department of Health", y="Cases", x="Month", color=NULL)+scale_x_date(labels = date_format("%b")) + theme_minimal()+theme(axis.title.y=element_text(hjust=0.7,size=10,colour="gray50"))+scale_fill_manual(values=c("#116466","#78244C"))
+```
+\newpage
+
+# Clark Co. Ratio of Deaths to Hospitalizations
+
+The ratio of hospitalizations to Deaths (D2H) is a proposed measure for the effectiveness of local health systems at mitigating the effects of COVID-19. This measure is calculated by dividing the number of hospitalizations by the total number of deaths. It is assumed that severity of illness for hospital admissions is similar acClark Ohio communities and therefore survival rates indicate greater or lesser success in mitigating the effects of the disease. 
+
+\newpage
+
+# Clark Co. Ratio of Deaths to Hospitalizations
+
+```{r echo=FALSE, dpi=300}
+ggplot(CVCOMOSUM2, aes(x=MDATE, y=D2H,fill=NAME)) +geom_col(alpha=0.7,position="dodge") +  labs(caption = "Source: Ohio Department of Health", y="Cases", x="Month", color=NULL)+scale_x_date(labels = date_format("%b")) + theme_minimal()+theme(axis.title.y=element_text(hjust=0.7,size=10,colour="gray50"))+scale_fill_manual(values=c("#116466","#78244C"))
+```
